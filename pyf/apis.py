@@ -9,6 +9,8 @@ import re
 import time
 from translate import Translator
 from pytrends.request import TrendReq
+from pytrends import dailydata
+from datetime import date, timedelta
 
 
 # DeepL
@@ -45,4 +47,3 @@ def deepl_translate_list(auth, keywords, lang_out, lang_in='en'):
             
     return keywords_translated, df_keywords_translated
 
-    
