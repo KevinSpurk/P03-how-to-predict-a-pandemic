@@ -8,7 +8,6 @@ import random
 import re
 
 
-
 # function to export df to csv with var naming
 # inputs: df, stings for constant and variable part of file name
 # outputs: df

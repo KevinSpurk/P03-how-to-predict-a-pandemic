@@ -11,7 +11,8 @@ from translate import Translator
 from pytrends.request import TrendReq
 from pytrends import dailydata
 from datetime import date, timedelta
-from imex import df_to_csv_format
+from pyf.imex import df_to_csv_format
+import tweepy as tw 
 
 
 # DeepL
@@ -56,7 +57,7 @@ def deepl_translate_list(auth, keywords, lang_out, lang_in='en'):
 # inputs: dict with 2-char id of starget countries as keys and list of keywords in target language as values ('GB' has to be the first lang),
 # start and end date in format YYYY-MM, sleep timer in sec
 # outputs: dict with search trend results, creates csv files of results for each language
-def g_trends_multilang(kw_dict, dt_start, dt_end, sleep_time=60):
+def g_trends_ml(kw_dict, dt_start, dt_end, sleep_time=60):
     # df for all results
     trends_all = pd.DataFrame({})
     
@@ -70,7 +71,7 @@ def g_trends_multilang(kw_dict, dt_start, dt_end, sleep_time=60):
             # get df with search trend for kw
             k_trend = dailydata.get_daily_data(k, int(dt_start.split('-')[0]), int(dt_start.split('-')[1]), int(dt_end.split('-')[0]), int(dt_end.split('-')[1]), geo=geo)
             time.sleep(sleep_time)
-            
+           
             # transform df
             k_trend = g_trends_df_transform(k_trend)
             
@@ -94,7 +95,7 @@ def g_trends_multilang(kw_dict, dt_start, dt_end, sleep_time=60):
     
     trends_all.reset_index(inplace=True)
     trends_all = trends_all.sort_values(by=['date'], ignore_index=True)
-    
+
     return trends_all
 
 
@@ -137,14 +138,45 @@ def g_trends_complete_timeframe(df, kw):
 # outputs: df reformated 
 def g_trends_df_transform(df):
     # drop unwanted col
-    df = df.drop(df.iloc[:, 1:], axis=1)
+    if len(df.columns) > 1:
+        df = df.drop(df.iloc[:, :-1], axis=1)
             
     # get date as col
     df.reset_index(inplace=True)
-    df.columns = df.columns.str.replace('_unscaled', '')
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     df['date'] = df['date'].dt.date
     return df
 
 
 
+# Twitter
+
+# get authentification for twitter API
+# inputs: txt file with credentials (l.2 api key, l.4 api key secret, l.6 token, l.8 token secret, l.10 bearer token)
+# outputs: api and client api access points
+def tweepy_auth(credentials):
+    # open cred file
+    with open(credentials) as t:
+        cred = t.readlines()
+    
+    # read lines with cred
+    tw_api_key = cred[1][:-1]
+    tw_api_key_sec = cred[3][:-1]
+    tw_token = cred[5][:-1]
+    tw_token_sec = cred[7][:-1]
+    tw_bearer_token = cred[9]
+
+    # twitter API authentication
+    tw_auth = tw.OAuthHandler(tw_api_key, tw_api_key_sec)
+    tw_auth.set_access_token(tw_token, tw_token_sec)
+    client = tw.Client(bearer_token=tw_bearer_token)
+
+    # authentication check
+    api = tw.API(tw_auth, wait_on_rate_limit=True)
+    try:
+        api.verify_credentials()
+        print("Authentication OK")
+    except:
+        print("Error during authentication")
+    
+    return api, client

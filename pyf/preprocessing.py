@@ -1,4 +1,4 @@
-# data pre-processing functions incl. cleaning, eda, feature engineering
+# data pre-processing functions incl. cleaning, feature engineering
 
 import pandas as pd
 import numpy as np
@@ -6,9 +6,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.stats as stats
 import datetime
+from datetime import timedelta
 import math
 import random
 import re
+
 from imblearn.over_sampling import SMOTE 
 from imblearn.under_sampling import TomekLinks
 
@@ -81,6 +83,49 @@ def value_overview(df, limit=0, neg_allowed=False):
     return overview, list(overview.index)
 
 
+# given a column to group entries of a df, ckeck if all entries are provided for the same range of dates
+# inputs: df, col to group by, col with dates
+# output: print statement if timeframe is complete, df with details about timeframe
+def timeframe_check_by_group(df, groupby, timeframe):
+    # lists for results df
+    group_item, dt_min, dt_max, date_count, group_len = [], [], [], [], []
+    # loop throught groups 
+    for x in df[groupby].unique():
+        # fill lists with info about dates present
+        group_item.append(x)
+        dt_min.append(min(df[df[groupby] == x][timeframe]))
+        dt_max.append(max(df[df[groupby] == x][timeframe]))
+        date_count.append(df[df[groupby] == x][timeframe].nunique())
+        group_len.append(len(df[df[groupby] == x]))
+    
+    # check if range of dates is identical and complete for all groups
+    if (min(dt_min) == max(dt_min)) & (min(dt_max) == max(dt_max)) & (min(date_count) == max(date_count)) & (min(group_len) == max(group_len)) & (min(date_count) == min(group_len)):
+        print('timeframe:', datetime.datetime.strftime(min(dt_min), "%Y-%m-%d"), '-', datetime.datetime.strftime(min(dt_max), "%Y-%m-%d"), '\n', 'no. of dates:', min(date_count), '\n', 'timeframe complete!')
+    else:
+        print('timeframe incomplete. Check details.')
+    
+    # create df for result details
+    results = pd.DataFrame({groupby: group_item, 'min_date': dt_min, 'max_date': dt_max, 'no_of_dates': date_count, 
+                            'expected_no_of_dates': (max(df[df[groupby] == x][timeframe]) - min(df[df[groupby] == x][timeframe])).days + 1})
+    
+    return results
+
+
+# limit df with date column to entries within a select timeframe
+# inputs: df, column of dates (datetime format), start and end date for chosen periode (str) with YYYY-MM-DD format
+# outputs: df
+def df_timeframe_limit(df, col, start_date, end_date):
+    # convert inputs to datetime
+    dt_a = str_to_date(start_date)
+    dt_b = str_to_date(end_date)
+
+    # drop rows with dates before and after chosen timeframe
+    df = df.drop(df[df[col] < dt_a].index)
+    df = df.drop(df[df[col] > dt_b].index)
+    
+    return df
+    
+
 # function to deal with class imbalances in binary classification
 # inputs: dfs for training set x, y, sampling method identification string, targeted ratio for maj./min. class for up-/down-/mix-sampling
 # outputs: balanced training set x, y 
@@ -121,6 +166,121 @@ def class_balancing(imb_X, imb_Y, method='down', ratio=1.5):
         bal_X = train_sampled.drop([target_col], axis=1)
         bal_Y = pd.DataFrame(train_sampled[target_col])
     return bal_X, bal_Y
+
+
+# converts string into date format
+# inputs: date string of most common formats, outputs: date object of date
+def str_to_date(date_str):
+    try:
+        date_object = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+    except:
+        try:
+            date_object = datetime.datetime.strptime(date_str, '%y-%m-%d')
+        except:
+            try:
+                date_object = datetime.datetime.strptime(date_str, '%m/%d/%Y')
+            except:
+                try:
+                    date_object = datetime.datetime.strptime(date_str, '%m/%d/%y')
+                except:
+                    try:
+                        date_object = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            date_object = datetime.datetime.strptime(date_str, '%m/%d/%y %H:%M:%S')
+                        except:
+                            try:
+                                date_object = datetime.datetime.strptime(date_str, '%Y %m %d')
+                            except:
+                                date_object = datetime.datetime.strptime('0000-00-00', '%Y-%m-%d')
+                                print('date format unknown.')
+                                   
+    date_object = date_object.date()
+    return date_object
+
+
+# transform df with time series data to df with dates as indexes
+# inputs: df, column with dates in datetime format, outputs: df
+def df_to_timeseries(df, timeframe):
+    df = df.sort_values(by=[timeframe], ignore_index=True)
+    df = df.set_index(timeframe, drop=True)
+    return df
+
+# plot a time series df
+# inputs: df, col with dates in datetime format, plot title (str)
+def timeseries_plot(df, timeframe, title=''):
+    # convert df to time series
+    plot_df = df_to_timeseries(df=df, timeframe=timeframe)
+    
+    # create time series plot
+    custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
+    sns.set(rc={'figure.figsize':(20,16)})
+    sns.set_theme(style="whitegrid", rc=custom_params)
+    # option for title
+    if title != '':
+        sns.set_title(title)
+    plot_df.plot()
+    plt.xticks(rotation=45)
+    plt.show()
+    return df
+
+# list the missing dates in a time series df
+# inputs: df, col with dates in datetime format, astart and end date of period to check (str)
+# outputs: missing dates (list)
+def timeseries_missing_dates(df, timeframe, start_date, end_date):
+    # set start and end date for loop
+    start_date = str_to_date(start_date)
+    end_date = str_to_date(end_date)
+    
+    # items for missing days
+    missing = []
+    
+    # loop to find missing dates in df
+    current = start_date
+    while current <= end_date:
+        date_check = False
+        for d in df[timeframe]:
+            if d == current:
+                date_check = True
+        # append missing date to lists
+        if date_check == False:
+            missing.append(current)
+        current += timedelta(days=1)
+    return missing
+    
+# check a time series df for missing dates and add rows for them 
+# inputs: df, col with dates in datetime format, astart and end date of period to check (str), col with constant values to adopt for rows with misssing dates (list)
+# outputs: df with NaNs for missing values
+def complete_timeseries(df, timeframe, start_date, end_date, constant_col=[]):
+    # list missing dates of time series
+    missing_dates = timeseries_missing_dates(df=df, timeframe=timeframe, start_date=start_date, end_date=end_date)
+    # dict for missing dates
+    missing_data = {timeframe: missing_dates}
+    
+    # create lists with data for dict
+    for col in df.columns:
+        if col != timeframe:
+            # list to fill columns with known constant values
+            if col in constant_col:
+                missing_values = [df[col].iloc[0] for m in missing_dates]
+            # list to fill columns with NaN
+            else:
+                missing_values = [np.NaN for m in missing_dates]
+            # fill dict with data for column
+            missing_data[col] = missing_values
+    
+    # put missing data dict into df
+    columns_ordered = df.columns.tolist()
+    df_dates_missing = pd.DataFrame(missing_data)
+    df_dates_missing = df_dates_missing[columns_ordered]
+    
+    # concat existing df with missing dates df 
+    df_completed = pd.concat([df, df_dates_missing], axis=0)
+    df_completed[timeframe] = pd.to_datetime(df_completed[timeframe], errors='coerce')
+    df_completed[timeframe] = df_completed[timeframe].dt.date
+    df_completed = df_completed.sort_values(by=[timeframe], ignore_index=True)
+    
+    return df_completed   
 
 
 # function to drop columns
