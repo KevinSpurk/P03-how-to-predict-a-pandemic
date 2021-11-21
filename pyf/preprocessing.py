@@ -199,31 +199,6 @@ def str_to_date(date_str):
     return date_object
 
 
-# transform df with time series data to df with dates as indexes
-# inputs: df, column with dates in datetime format, outputs: df
-def df_to_timeseries(df, timeframe):
-    df = df.sort_values(by=[timeframe], ignore_index=True)
-    df = df.set_index(timeframe, drop=True)
-    return df
-
-# plot a time series df
-# inputs: df, col with dates in datetime format, plot title (str)
-def timeseries_plot(df, timeframe, title=''):
-    # convert df to time series
-    plot_df = df_to_timeseries(df=df, timeframe=timeframe)
-    
-    # create time series plot
-    custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
-    sns.set(rc={'figure.figsize':(20,16)})
-    sns.set_theme(style="whitegrid", rc=custom_params)
-    # option for title
-    if title != '':
-        sns.set_title(title)
-    plot_df.plot()
-    plt.xticks(rotation=45)
-    plt.show()
-    return df
-
 # list the missing dates in a time series df
 # inputs: df, col with dates in datetime format, astart and end date of period to check (str)
 # outputs: missing dates (list)
@@ -281,6 +256,31 @@ def complete_timeseries(df, timeframe, start_date, end_date, constant_col=[]):
     df_completed = df_completed.sort_values(by=[timeframe], ignore_index=True)
     
     return df_completed   
+
+
+# interpolation in a timeseries df where dates appear multiple times, but are unique if df is clustered by a specific column
+# inputs: df, name of culster column (str), method of interpolation (str), additional kwargs for pd.interpolate
+# outputs: df
+def timeseries_interpolation_clustered(df, timeframe, cluster_by, method='linear', **kwargs):
+    # df for output
+    df_full = pd.DataFrame({})
+    
+    # loop through clusters
+    for c in df[cluster_by].unique():
+        # create datetimeindex
+        df_temp = df[df[cluster_by] == c]
+        datetime_index = pd.DatetimeIndex(df_temp[timeframe].values)
+        df_temp.set_index(datetime_index, inplace=True)
+        # interpolation
+        df_temp = df_temp.interpolate(method=method, **kwargs)
+        # concat with full df
+        df_full = pd.concat([df_full, df_temp], axis=0)
+    
+    df_full[timeframe] = pd.to_datetime(df_full[timeframe], errors='coerce')
+    df_full.reset_index(inplace=True, drop=True)
+    
+    return df_full
+
 
 
 # function to drop columns
