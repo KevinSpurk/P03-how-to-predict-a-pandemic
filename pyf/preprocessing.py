@@ -282,12 +282,90 @@ def timeseries_interpolation_clustered(df, timeframe, cluster_by, method='linear
     return df_full
 
 
+# add columns with simple moving average to timeseries df
+# inputs: df, timeframe column name (str), nod=number of days to calc srm from, columns=list of col names (default=all num. col)
+# outputs: df
+def timeseries_sma(df, timeframe, nod, columns=[]):
+    # use all columns by default
+    if columns == []:
+        columns = df.select_dtypes(np.number).columns
+    
+    # sort timeseries
+    df[timeframe] = pd.to_datetime(df[timeframe], errors='coerce')
+    df = df.sort_values(by=[timeframe], ignore_index=True)
+
+    # loop through columns
+    for col in columns:
+        # def sma column
+        columnname_new = col + '_sma_' + str(nod) + 'd'
+        df[columnname_new] = df[col]
+        
+        # loop through rows to add sma
+        for i in range(len(df)):
+            # case: days with not enogh prev days to have sma
+            if i < nod-1:
+                df[columnname_new].iloc[i] = np.NaN
+            # case: days to calc sma
+            else:
+                # list to create sum for averaging
+                row_sum = [df[col].iloc[i-n] for n in range(nod-1)]
+                # add sma
+                df[columnname_new].iloc[i] = np.round((sum(row_sum)/nod),3)
+    return df
+
+# add columns with simple moving average to timeseries df with clustered data
+# inputs: df, timeframe column name (str), nod=number of days to calc srm from, 
+# columns=list of col names (default=all num. col), cluster_by=col name of cluster col(str)
+# outputs: df
+def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=''):
+    # df for output
+    df_full = pd.DataFrame({})
+    
+    # loop through clusters
+    for c in df[cluster_by].unique():
+        # create datetimeindex
+        df_temp = df[df[cluster_by] == c]
+        # add sma 
+        df_temp = timeseries_sma(df=df_temp, timeframe=timeframe, nod=nod, columns=columns)
+        df_full = pd.concat([df_full, df_temp], axis=0)
+    
+    df_full[timeframe] = pd.to_datetime(df_full[timeframe], errors='coerce')
+    df_full.reset_index(inplace=True, drop=True)
+    
+    return df_full
+
+
+# extract season from date column
+# inputs: df, dates=col of dates (str), drop_date=drop original date col (bool, default=False)
+# output: df
+def df_date_to_season(df, dates, drop_dates=False):
+    df[dates] = pd.to_datetime(df[dates], errors='coerce')  
+    
+    # create col for month and season
+    df['month'] = df[dates].dt.month
+    df['season'] = pd.Series(['' for x in range(len(df))])
+    
+    # get season
+    check_season = lambda s : 'winter' if (s >= 1 and s <= 2) else ('spring' if s >= 3 and s <= 5 else ('summer' if s >= 6 and s <= 8 else ('fall' if s >= 9 and s <= 11 else ('winter' if s == 12 else np.NaN))))
+    
+    # loop to fill season col
+    for i in range(len(df)):
+        df['season'].iloc[i] = check_season(df['month'].iloc[i])
+    
+    # drop temp col    
+    df = df.drop(['month'], axis=1)
+    if drop_dates == True:
+        df = df.drop([dates], axis=1)
+    
+    return df
+
 
 # function to drop columns
 # inputs: df, list of columns
 # outputs: df
 def drop_features(df, drop):
     df = df.drop(columns=drop)
+    
     return df
 
 
