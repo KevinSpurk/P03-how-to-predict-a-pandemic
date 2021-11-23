@@ -11,6 +11,12 @@ import math
 import random
 import re
 
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.tools.tools import add_constant
+from patsy import dmatrices
+from scipy.stats import chi2
+from scipy.stats import chi2_contingency
+
 from imblearn.over_sampling import SMOTE 
 from imblearn.under_sampling import TomekLinks
 
@@ -302,13 +308,13 @@ def timeseries_sma(df, timeframe, nod, columns=[]):
         
         # loop through rows to add sma
         for i in range(len(df)):
-            # case: days with not enogh prev days to have sma
+            # case: days with not enough prev days to have sma
             if i < nod-1:
                 df[columnname_new].iloc[i] = np.NaN
             # case: days to calc sma
             else:
                 # list to create sum for averaging
-                row_sum = [df[col].iloc[i-n] for n in range(nod-1)]
+                row_sum = [df[col].iloc[i-n] for n in range(nod)]
                 # add sma
                 df[columnname_new].iloc[i] = np.round((sum(row_sum)/nod),3)
     return df
@@ -317,7 +323,7 @@ def timeseries_sma(df, timeframe, nod, columns=[]):
 # inputs: df, timeframe column name (str), nod=number of days to calc srm from, 
 # columns=list of col names (default=all num. col), cluster_by=col name of cluster col(str)
 # outputs: df
-def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=''):
+def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
     # df for output
     df_full = pd.DataFrame({})
     

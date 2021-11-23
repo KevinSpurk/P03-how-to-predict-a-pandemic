@@ -27,7 +27,6 @@ def show_heatmap(df, w, h, method='pearson', title=''):
         ax.set_title('\n' + title + '\n', fontsize=16)
     plt.xticks(rotation=45, ha='right')
     plt.show()
-    return 'heatmap'
 
 
 # transform df with time series data to df with dates as indexes
@@ -54,6 +53,30 @@ def timeseries_plot(df, timeframe, title=''):
     plt.xticks(rotation=45)
     plt.show()
     return df
+
+
+# show correlactions of 2 columns above a certain treshold in a df
+# inputs: df, method=correlation calc method (str, values that work with pd.corr), limit=corr threshold (float)
+# outputs: df
+def correlation_check(df, method='pearson', limit=0.8):
+    # build corr matrix
+    corr_matrix=df.corr(method=method)
+    # build dict for results
+    results = {'feature_1': [], 'feature_2': [], 'correlation': []}
+    
+    for col in range(corr_matrix.shape[1]-1):
+        row_range = col+1
+        for row in range(row_range):
+            if (corr_matrix.iloc[row, col+1] >= limit) | (corr_matrix.iloc[row, col+1] <= (-1*limit)):
+                # fill dict values with data for corr above 0.8
+                results['feature_1'].append(corr_matrix.columns[col+1])
+                results['feature_2'].append(corr_matrix.index[row])
+                results['correlation'].append(round(corr_matrix.iloc[row, col+1], 3))
+    
+    # df with results from dict
+    df_results = pd.DataFrame(results)
+                
+    return df_results
 
 
 
