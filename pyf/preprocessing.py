@@ -13,9 +13,10 @@ import re
 
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.tools import add_constant
-from patsy import dmatrices
+from sklearn.feature_selection import VarianceThreshold
 from scipy.stats import chi2
 from scipy.stats import chi2_contingency
+import statsmodels.api as sm
 
 from imblearn.over_sampling import SMOTE 
 from imblearn.under_sampling import TomekLinks
@@ -329,12 +330,14 @@ def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
     
     # loop through clusters
     for c in df[cluster_by].unique():
-        # create datetimeindex
+        # create df for one cluster
         df_temp = df[df[cluster_by] == c]
         # add sma 
         df_temp = timeseries_sma(df=df_temp, timeframe=timeframe, nod=nod, columns=columns)
+        # add df for one cluster to output df
         df_full = pd.concat([df_full, df_temp], axis=0)
     
+    # clean up output df
     df_full[timeframe] = pd.to_datetime(df_full[timeframe], errors='coerce')
     df_full.reset_index(inplace=True, drop=True)
     
@@ -364,6 +367,204 @@ def df_date_to_season(df, dates, drop_dates=False):
         df = df.drop([dates], axis=1)
     
     return df
+
+
+# merge feature and target dfs with multiple targets. 
+# results in dict with 1 combined df containing all targets (results['all_targets']) and 1 df for each target combined separately with features (results[<target var>])
+# inputs: feature df, targets df, on=col to merge on (list), skip=target col to skip (list), timeframe=col with datetime data in case it is used for merge (str), 
+# how=merge method for pd.merge (str, default='inner'), **kwargs=more args for pd.merge
+# outputs: dict 
+def merge_features_targets(df, targets, on, skip=[], timeframe='', how='inner', **kwargs):
+    # dict for resulting dfs
+    results = {}
+    
+    # removed target col to skip
+    if skip == []:
+        targets_selected = targets.copy()
+    else:
+        targets_selected = targets.drop(skip, axis=1)
+    
+    # prepare datetime col for merge in case its used for merge on 
+    if timeframe != '':
+        df[timeframe] = pd.to_datetime(df[timeframe], errors='coerce')
+        targets_selected[timeframe] = pd.to_datetime(targets_selected[timeframe], errors='coerce')
+    
+    # loop through target col
+    for col in targets_selected.columns:
+        if col not in on:
+            # merge df with one targets
+            combined = pd.merge(df, targets_selected[on + [col]], on=on, how=how, **kwargs)
+            # convert timeframe to datetime col 
+            if timeframe != '':
+                combined[timeframe] = pd.to_datetime(combined[timeframe], errors='coerce')
+            # add to dict
+            results[col] = combined
+        
+    # create df with all target col
+    combined = pd.merge(df, targets_selected, on=on, how=how, **kwargs)
+    
+    # convert timeframe to datetime col 
+    if timeframe != '':
+        combined[timeframe] = pd.to_datetime(combined[timeframe], errors='coerce')
+
+    # add df with all target col to dict
+    results['all_targets'] = combined
+    
+    return results
+
+
+# get df with variance value for each column of a df
+# inputs: df, threshold=variance value limit below which feature can be removed (float)
+# outputs: df with variance results
+def show_variance(df, target, threshold=0.9):
+    # get numerical col
+    numerical = df.select_dtypes(np.number)
+    # drop target var in case its numerical
+    try:
+        numerical = numerical.drop([target], axis=1)
+    except:
+        pass
+    
+    # getting variance values
+    selection = VarianceThreshold(threshold=(threshold))
+    selection.fit(numerical)
+    
+    # building df with results
+    results = pd.DataFrame(data=(numerical.columns,selection.variances_,selection.get_support()), index=('column_name','variance','include')).T
+    #results['variance'] = round(results['variance'],3)
+    
+    return results
+
+
+# calculate p_value for feature columns
+# inputs: df, target=column with target var (str), outputs: df with results
+def show_p_value(df, target):
+    # x-y-split
+    y = df[[target]]
+    X = df.select_dtypes(np.number)
+    # drop target in case its numerical
+    try:
+        X = X.drop([target], axis=1)
+    except:
+        pass
+    X = sm.add_constant(X)
+    
+    # recieve p values
+    model = sm.OLS(y, X).fit()
+    p = model.pvalues
+    
+    # results df
+    results = pd.DataFrame(p, columns=['p value'])
+    results['p value'] = round(results['p value'],3)
+    
+    return results
+
+
+# calculate variance inflation factor (VIF) for columns to check for multicorrelarity
+# inputs: df, target=column with target var (str), outputs: df with results
+def show_vif(df, target):
+    # select features for VIF calc
+    numerical = df.select_dtypes(np.number)
+    # drop target var in case its numerical
+    try:
+        numerical = numerical.drop([target], axis=1)
+    except:
+        pass
+    vif_numericals = add_constant(numerical)
+    
+    # df for results
+    vif = pd.DataFrame(index=vif_numericals.columns)
+    
+    # VIF calc
+    vif["VIF"] = [round(variance_inflation_factor(np.array(vif_numericals), i),3) for i in range(len(vif_numericals.columns))]
+    
+    return vif
+
+
+# show column variance, p value and variance inflation factor (VIF) of columns for feature selection
+# inputs: df, target=column with target var (str), variance_threshold=variance value limit below which feature could be removed (float, optional)
+# outputs: df with results
+def feature_selection_indicators(df, target, variance_threshold=0.9):
+    # call function to get each indicator 
+    variance_table = show_variance(df=df, target=target, threshold=variance_threshold)
+    p_table = show_p_value(df=df, target=target)
+    vif_table = show_vif(df=df, target=target)
+    
+    # get variance table in same format as others
+    const_row = pd.DataFrame({'column_name': ['-'], 'variance': ['-'], 'include': ['-']})
+    variance_table = pd.concat([const_row, variance_table], ignore_index=True)
+    variance_table.index = vif_table.index
+    
+    # combine tables
+    indicators = pd.concat([variance_table[['variance']], p_table[['p value']], vif_table[['VIF']]], axis=1)
+
+    return indicators
+
+
+# get a df where the target var is shifted a certain number of rows to create a time lag between features and target
+# inputs: df, timeframe=name of col with timeseries data (str), target=name of target col (str), lag=amount of rows to shift by (int)
+# outputs: df
+def timeseries_target_lag(df, timeframe, target, lag):
+    # prepare datetime col for target shift
+    df[timeframe] = pd.to_datetime(df[timeframe], errors='coerce')
+    df = df.sort_values(by=timeframe, ignore_index=True, ascending=True)
+    
+    # create target lag col
+    target_lag = target + '_lag' + str(lag)
+    df[target_lag] = df[target].shift((-1)*lag)
+    
+    # remove original target and rows with NaNs 
+    df = df.drop([target], axis=1)
+    df = df.dropna()
+    
+    return df
+
+# get a df where the target var is shifted a certain number of rows to create a time lag between features and target
+# same funcionality as timeseries_target_lag, but for dfs with a col to cluter by
+# inputs: df, timeframe=name of col with timeseries data (str), cluster_by=name of col to cluster by (str), 
+# target=name of target col (str), lag=amount of rows to shift by (int)
+# outputs: df
+def timeseries_clustered_target_lag(df, timeframe, cluster_by, target, lag):
+    # df for output
+    df_full = pd.DataFrame({})
+    
+    # loop through clusters
+    for c in df[cluster_by].unique():
+        # create df for one cluster
+        df_temp = df[df[cluster_by] == c]
+        # add sma 
+        df_temp = timeseries_target_lag(df=df_temp, timeframe=timeframe, target=target, lag=lag)
+        # add df for one cluster to output df
+        df_full = pd.concat([df_full, df_temp], axis=0)
+    
+    # clean up output df
+    df_full[timeframe] = pd.to_datetime(df_full[timeframe], errors='coerce')
+    df_full.reset_index(inplace=True, drop=True)
+    
+    return df_full
+    
+# get a df where the target var is shifted a certain number of rows to create a time lag between features and target
+# works for dfs with a col to cluter by, 
+# same functionality as timeseries_clustered_target_lag but returns a dict of different dfs with different lag values
+# inputs: df, timeframe=name of col with timeseries data (str), cluster_by=name of col to cluster by (str), 
+# target=name of target col (str), min_lag, max_lag=interval of lag values to shift the target by (int)
+# outputs: df    
+def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag, max_lag):
+    # dict for resulting dfs
+    results = {}
+    
+    # add df without lag to results dict
+    results['nolag'] = df
+    
+    # loop through lag interval
+    for lag in range(min_lag, max_lag+1):
+        # create df for one lag value
+        df_lag = timeseries_clustered_target_lag(df=df, timeframe=timeframe, cluster_by=cluster_by, target=target, lag=lag)
+        # add df to results dict
+        df_title = 'lag_' + str(lag)
+        results[df_title] = df_lag
+    
+    return results
 
 
 # function to drop columns
