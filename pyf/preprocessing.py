@@ -394,6 +394,7 @@ def merge_features_targets(df, targets, on, skip=[], timeframe='', how='inner', 
         if col not in on:
             # merge df with one targets
             combined = pd.merge(df, targets_selected[on + [col]], on=on, how=how, **kwargs)
+            combined.reset_index(inplace=True, drop=True)
             # convert timeframe to datetime col 
             if timeframe != '':
                 combined[timeframe] = pd.to_datetime(combined[timeframe], errors='coerce')
@@ -402,6 +403,7 @@ def merge_features_targets(df, targets, on, skip=[], timeframe='', how='inner', 
         
     # create df with all target col
     combined = pd.merge(df, targets_selected, on=on, how=how, **kwargs)
+    combined.reset_index(inplace=True, drop=True)
     
     # convert timeframe to datetime col 
     if timeframe != '':
@@ -543,6 +545,7 @@ def timeseries_clustered_target_lag(df, timeframe, cluster_by, target, lag):
     
     return df_full
     
+    
 # get a df where the target var is shifted a certain number of rows to create a time lag between features and target
 # works for dfs with a col to cluter by, 
 # same functionality as timeseries_clustered_target_lag but returns a dict of different dfs with different lag values
@@ -554,6 +557,7 @@ def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag,
     results = {}
     
     # add df without lag to results dict
+    df.reset_index(inplace=True, drop=True)
     results['nolag'] = df
     
     # loop through lag interval
@@ -565,31 +569,6 @@ def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag,
         results[df_title] = df_lag
     
     return results
-
-
-# encoding categorical col with get dummies
-# inputs: df, in_columns=col to encode (list, default=all object col), skip_columns=col not to encode (list, default=empty), 
-# drop_first= value for pd.get_dummies
-# outputs: df
-def encoding_get_dummies(df, in_columns=[], skip_columns=[], drop_first=True):
-    # set col to all object col by default
-    if in_columns == []:
-        in_columns = list(df.select_dtypes(np.object).columns)
-        # list col not to include in encoding
-        for col in skip_columns:
-            in_columns.remove(col)
-            
-    # split df into df to encode and df with other col    
-    df_encode = df[in_columns]
-    df_rest = df.drop(in_columns, axis=1)
-    
-    # encode
-    df_encode = pd.get_dummies(df_encode, drop_first=drop_first)
-    
-    # concat encoded and other col
-    df = pd.concat([df_encode, df_rest], axis=1)
-    
-    return df
 
 
 # function to drop columns
