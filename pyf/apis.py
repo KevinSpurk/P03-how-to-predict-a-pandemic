@@ -70,7 +70,6 @@ def g_trends_ml(kw_dict, dt_start, dt_end, sleep_time=60):
         for k in kw_dict[geo]:
             # get df with search trend for kw
             k_trend = dailydata.get_daily_data(k, int(dt_start.split('-')[0]), int(dt_start.split('-')[1]), int(dt_end.split('-')[0]), int(dt_end.split('-')[1]), geo=geo)
-            time.sleep(sleep_time)
            
             # transform df
             k_trend = g_trends_df_transform(k_trend)
@@ -81,6 +80,10 @@ def g_trends_ml(kw_dict, dt_start, dt_end, sleep_time=60):
             # add df with search trend for kw to df for results of one loc
             search_trend['date'] = k_trend_completed['date']
             search_trend[k] = k_trend_completed[k]
+
+            # add random sleep time
+            random_sleep = random.randint(round(sleep_time/8),round(sleep_time/3))
+            time.sleep(sleep_time + random_sleep)
         
         # add loc to df 
         search_trend['location'] = geo
