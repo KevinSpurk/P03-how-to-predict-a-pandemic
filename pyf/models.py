@@ -139,6 +139,50 @@ def regression_model_and_evaluation(dataset, title, model_type, **kwargs):
     return model_dict, model_metrics
 
 
+# aggregate model metrics into a single df
+# inputs: metrics_sets=dict of dfs with metrics, 1 row per df and identical col.
+# outputs: df
+def compare_model_metrics(metrics_sets):
+    # df for results
+    results = pd.DataFrame({})
+    
+    # loop through metrics tables
+    for table in metrics_sets.values():
+        results = pd.concat([results, table], axis=0)
+    
+    results.reset_index(inplace=True, drop=True)
+    results.style.hide_index()
+    
+    return results
+
+# automates the creation of regression models for multiple datasets and the comparison of their model metrics
+# using functions regression_model_and_evaluation and compare_model_metrics
+# inputs: datasets=dict of model datasets as created with train_test_split_items function, titles=titles for the models (list), model type=model to use, kwargs= additional arguments for model
+# outputs: input dict with model datasets and added items for model and evaluation metrics, df with model metrics comparison
+def regression_model_comparison(datasets, titles, model_type, **kwargs):
+    # dict to store all metrics tables
+    metrics_allmodels = {}
+    
+    # iterator for list of titles
+    i = 0
+    
+    # loop through model datasets with different time lags
+    for data in datasets.values():
+        # model title
+        model_title = titles[i]
+        # create model and evaloation
+        lr_data, lr_metrics = regression_model_and_evaluation(dataset=data, title=model_title, model_type=model_type, **kwargs)
+        # add evaluation to dict
+        metrics_allmodels[model_title] = lr_metrics
+        # go to next model title in list
+        i += 1
+    
+    # combine all evaluations into single df
+    results = compare_model_metrics(metrics_allmodels)
+    
+    return datasets, results
+
+
 
 
 
