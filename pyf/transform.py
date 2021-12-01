@@ -10,6 +10,8 @@ import math
 import random
 import re
 
+from sklearn.preprocessing import Normalizer, StandardScaler, MinMaxScaler, LabelEncoder
+
 
 # encoding categorical col with get dummies
 # inputs: df, in_columns=col to encode (list, default=all object col), skip_columns=col not to encode (list, default=empty), 
@@ -37,6 +39,139 @@ def encoding_get_dummies(df, in_columns=[], skip_columns=[], drop_first=True):
     return df
 
 
+# decode a pd.get_dummies encoded df
+# works only if get_dummies was done with 'drop_first=False' and if col names of dummified col did not appear as part of other col names
+# inputs: df, columns= col to decode (list), keep_dummies=option to keep or drop encoded col for output df (bool, default=False)
+# outputs: decoded df
+def invert_getdummies(df, columns, keep_dummies=False):
+    # new df for all undummified columns
+    df_undummify = df.copy()
+    
+    # loop though col to undummify
+    for col in columns:
+        # list get dummies columns
+        undummify = [dummy_col for dummy_col in df.columns if dummy_col.startswith(col) == True]
+        
+        # create df with dummy col only
+        df_temp = df[undummify]
+        
+        # get df with original values from col names
+        original_val = [c.split('_', maxsplit=1)[1] for c in df_temp.columns]
+        df_temp.columns = original_val
+        results = pd.DataFrame({col: df_temp.idxmax(axis='columns')})
+        
+        # add to return df
+        df_undummify = pd.concat([df_undummify, results], axis=1)
+        
+        # case: drop get dummies col 
+        if keep_dummies==False:
+            df_undummify = df_undummify.drop(undummify, axis=1)
+            
+    return df_undummify
 
+
+
+from pyf.preprocessing import _df_split_columns_num
+
+# function to choose a feature transformation like StandardScaler, MinMaxScaler, Normalizer with the option to apply an existing fit 
+# take inputs: df, transformer_type=normaization function, load_transformer=transformer of a previous transformation, 
+# in_columns=col to transform (list, set to all num col inside func by default), skip=col not to transform if in_columns is default (list)
+# outputs: df with transformations, transformer
+def select_feature_scaling(df, in_columns=[], skip=[], transformer_type='', load_transformer=''):    
+    # select col for transformation
+    df_in, df_other = _df_split_columns_num(df=df, in_columns=in_columns, skip=skip)
+
+    # case: new transformation fit
+    if load_transformer == '':
+        transformer = transformer_type().fit(df_in)
+    # case: use existing fit
+    else:
+        transformer = load_transformer
+    
+    # transformation
+    transformed = transformer.transform(df_in)
+    df_transformed = pd.DataFrame(transformed, columns=list(df_in.columns))
+    
+    # formating transformed data
+    df_transformed.index = df_in.index
+    df_transformed.columns = df_in.columns
+    try:
+        df_transformed = pd.concat([df_transformed, df_other], axis=1)
+    except:
+        pass
+     
+    return df_transformed, transformer
+
+
+# function to choose a feature transformation like StandardScaler, MinMaxScaler, Normalizer and apply to a model dataset dict 
+# take inputs: dataset, transformer_type=normaization function, in_columns=col to transform (list, set to all num col inside func by default), 
+# skip=col not to transform if in_columns is default (list), target=choose btw. scaling features or target var (bool, default=False)
+# outputs: df with transformations, transformer
+def scaling_model_dataset(dataset, in_columns=[], skip=[], transformer_type='', target=False):
+    # create dataset copy for results
+    dataset_sclaed = dataset.copy()
+    
+    # case: scaling features
+    if target == False:
+        # scaling training set
+        dataset_sclaed['X_train'], _trfm = select_feature_scaling(df=dataset_sclaed['X_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
+        # scaling test set
+        dataset_sclaed['X_test'], _trfm = select_feature_scaling(df=dataset_sclaed['X_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
+    
+    # case: scaling target var
+    else:
+        # scaling training set
+        dataset_sclaed['y_train'], _trfm = select_feature_scaling(df=dataset_sclaed['y_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
+        # scaling test set
+        dataset_sclaed['y_test'], _trfm = select_feature_scaling(df=dataset_sclaed['y_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
+        
+    return dataset_sclaed, _trfm
+        
+
+# function to invert feature scaling transformation like StandardScaler, MinMaxScaler, Normalizer
+# take inputs: df, load_transformer=transformer to invert, in_columns=col to transform (list, set to all num col inside func by default), skip=col not to transform if in_columns is default (list)
+# outputs: df with original unscaled data
+def invert_feature_scaling(df, load_transformer, in_columns=[], skip=[]):
+     # select col for transformation
+    df_in, df_other = _df_split_columns_num(df=df, in_columns=in_columns, skip=skip)
+    
+    # invert sclaing
+    inverted = load_transformer.inverse_transform(df_in)
+    
+     # creating df from inverted data
+    df_inverted = pd.DataFrame(inverted, columns=list(df_in.columns))
+    df_inverted.index = df_in.index
+    try:
+        df_inverted = pd.concat([df_inverted, df_other], axis=1)
+    except:
+        pass
+     
+    return df_inverted    
+
+
+# function to invert feature scaling transformation like StandardScaler, MinMaxScaler, Normalizer
+# take inputs: dataset, load_transformer=transformer to invert, in_columns=col to transform (list, set to all num col inside func by default), 
+# skip=col not to transform if in_columns is default (list), target=choose btw. unscaling features or target var (bool, default=False), trainingset=choose to unscaling trainingset too (bool, default=False)
+# outputs: dataset with original unscaled data    
+def invert_scaling_model_dataset(dataset,  load_transformer, in_columns=[], skip=[], target=False, trainingset=False):
+    # create dataset copy for results
+    dataset_inverted = dataset.copy()
+    # case: invert feature scaling
+    if target == False:
+        # invert scaling of test data
+        dataset_inverted['X_test'] = invert_feature_scaling(df=dataset_inverted['X_test'], in_columns=in_columns, skip=skip, load_transformer=load_transformer)
+        # invert scaling of training data
+        if trainingset == True:
+            dataset_inverted['X_train'] = invert_feature_scaling(df=dataset_inverted['X_train'], in_columns=in_columns, skip=skip, load_transformer=load_transformer)
+    
+    # case: invert target var scaling
+    else:
+        # invert scaling of test data
+        dataset_inverted['y_test'] = invert_feature_scaling(df=dataset_inverted['y_test'], in_columns=in_columns, skip=skip, load_transformer=load_transformer)
+        # invert scaling of training data
+        if trainingset == True:
+            dataset_inverted['y_train'] = invert_feature_scaling(df=dataset_inverted['y_train'], in_columns=in_columns, skip=skip, load_transformer=load_transformer)
+    
+    return dataset_inverted
 
 

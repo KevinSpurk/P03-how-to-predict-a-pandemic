@@ -571,6 +571,32 @@ def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag,
     return results
 
 
+# create 2 dfs from 1 df, based separating a selection of numerical col from all other col
+# inputs: df, in_columns=columns to go into df_in (list, set to all num col inside the func as default), skip=columns to go into df_out (list, default empty)
+# outputs: df_in, df_out
+def _df_split_columns_num(df, in_columns, skip):
+    # set df_out as empty df in case all col go into df_in
+    df_out = pd.DataFrame({})
+    
+    # case: select all num col by default 
+    if in_columns == []:
+        in_columns = list(df.select_dtypes(np.number).columns)
+        for col in skip:
+            in_columns.remove(col)
+    # case: select input columns
+    else:
+        in_columns = [col for col in in_columns if col not in skip]
+    
+    # separate dfs for numerical and non numerical col
+    df_in = df[in_columns]
+    try:
+        df_out = df.drop(in_columns, axis=1)
+    except:
+        pass
+    
+    return df_in, df_out
+
+
 # function to drop columns
 # inputs: df, list of columns
 # outputs: df
@@ -578,5 +604,8 @@ def drop_features(df, drop):
     df = df.drop(columns=drop)
     
     return df
+
+
+
 
 

@@ -112,16 +112,18 @@ def regression_model_evaluation_metrics(dataset):
     predictions = dataset['model'].predict(dataset['X_test'])
     
     # model scores
-    r2_score = round(dataset['model'].score(dataset['X_test'], dataset['y_test']), 3)
+    r2_train = round(dataset['model'].score(dataset['X_train'], dataset['y_train']), 3)
+    r2_test = round(dataset['model'].score(dataset['X_test'], dataset['y_test']), 3)
+    r2_adj = round(1-(1-r2_test)*((len(dataset['X_test'])-1)/(len(dataset['X_test'])-len(dataset['X_test'].columns)-1)), 3)
     mae = round(mean_absolute_error(dataset['y_test'], predictions), 3)
     rmse = round(mean_squared_error(dataset['y_test'], predictions, squared=False), 3)
     mse = round(mean_squared_error(dataset['y_test'], predictions, squared=True), 3)
     
     # collect metrics in df
-    metrics = pd.DataFrame({'model_title': [dataset['title']], 'R2_score': [r2_score], 'MAE': [mae], 'RMSE': [rmse], 'MSE': [mse]})
+    metrics = pd.DataFrame({'model title': [dataset['title']], 'R2 (train)': [r2_train], 'R2 (test)': [r2_test], 'R2 adj.': [r2_adj], 'MAE': [mae], 'RMSE': [rmse], 'MSE': [mse]})
 
     # add eval results to model dict
-    evaluation = {'predictions': predictions, 'R2_score': r2_score, 'MAE': mae, 'RMSE': rmse, 'MSE': mse}
+    evaluation = {'predictions': predictions, 'r2_train': r2_train, 'r2_test': r2_test,'r2_adj': r2_adj, 'MAE': mae, 'RMSE': rmse, 'MSE': mse}
     dataset.update(evaluation)
     
     return dataset, metrics
@@ -166,7 +168,7 @@ def regression_model_comparison(datasets, titles, model_type, **kwargs):
     # iterator for list of titles
     i = 0
     
-    # loop through model datasets with different time lags
+    # loop through model datasets in dict
     for data in datasets.values():
         # model title
         model_title = titles[i]
@@ -183,6 +185,51 @@ def regression_model_comparison(datasets, titles, model_type, **kwargs):
     return datasets, results
 
 
+# get model evaluation metrics based on a dataset dict as created with model_dataset function
+# metrics for a subset of the test data defined by a col to cluster by 
+# inputs: dataset=dict with train test split items and model data, cluster_by=name cluster col (str), 
+# undummify=option to use a prev get_dummies encoded col a cluster col (bool, default=False)
+# outputs: df with evaluation metrics
+from pyf.transform import invert_getdummies
+
+def regression_model_evaluation_clustered(dataset, cluster_by, undummify=False):
+    # new df to gather metrics for all clusters
+    results = pd.DataFrame({})
+                                                   
+    X_test = dataset['X_test'].copy()
+    
+    # case: get original cluster col if prev encoded with pd.get_dummies
+    if undummify == True:
+        X_test = invert_getdummies(df=X_test, columns=[cluster_by], keep_dummies=True)                                         
+
+    # rejoin x test and y test
+    testset = pd.concat([X_test, dataset['y_test']], axis=1)
+                        
+    # loop through clusters
+    for c in testset[cluster_by].unique():
+        # create df for one cluster
+        df_temp = testset[testset[cluster_by] == c]
+        # x-y-split of test set
+        X_test_cluster = df_temp.iloc[:, :-1]
+        y_test_cluster = df_temp.drop(df_temp.iloc[:, :-1], axis=1)
+        # case: remove original cluster col if prev encoded with pd.get_dummies
+        if undummify == True:
+            X_test_cluster = X_test_cluster.drop(cluster_by, axis=1)
+        # create dataset dict for cluster for metrics function
+        dataset_temp = dataset.copy()
+        dataset_temp['X_test'] = X_test_cluster
+        dataset_temp['y_test'] = y_test_cluster
+        
+        # get model evaluation metrics for cluster
+        cluster_dict, cluster_metrics = regression_model_evaluation_metrics(dataset=dataset_temp)
+
+        # add cluster name to metrics table
+        cluster_metrics.insert(1, cluster_by, [c])
+
+        # add cluster metrics to results df
+        results = pd.concat([results, cluster_metrics], axis=0)
+    
+    return results
 
 
 
