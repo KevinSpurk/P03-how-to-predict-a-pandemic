@@ -290,7 +290,7 @@ def timeseries_interpolation_clustered(df, timeframe, cluster_by, method='linear
 
 
 # add columns with simple moving average to timeseries df
-# inputs: df, timeframe column name (str), nod=number of days to calc srm from, columns=list of col names (default=all num. col)
+# inputs: df, timeframe column name (str), nod=number of days to calc sma from, columns=list of col names (default=all num. col)
 # outputs: df
 def timeseries_sma(df, timeframe, nod, columns=[]):
     # use all columns by default
@@ -321,7 +321,7 @@ def timeseries_sma(df, timeframe, nod, columns=[]):
     return df
 
 # add columns with simple moving average to timeseries df with clustered data
-# inputs: df, timeframe column name (str), nod=number of days to calc srm from, 
+# inputs: df, timeframe column name (str), nod=number of days to calc sma from, 
 # columns=list of col names (default=all num. col), cluster_by=col name of cluster col(str)
 # outputs: df
 def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
@@ -334,6 +334,61 @@ def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
         df_temp = df[df[cluster_by] == c]
         # add sma 
         df_temp = timeseries_sma(df=df_temp, timeframe=timeframe, nod=nod, columns=columns)
+        # add df for one cluster to output df
+        df_full = pd.concat([df_full, df_temp], axis=0)
+    
+    # clean up output df
+    df_full[timeframe] = pd.to_datetime(df_full[timeframe], errors='coerce')
+    df_full.reset_index(inplace=True, drop=True)
+    
+    return df_full
+
+
+# add columns with moving sum to timeseries df
+# inputs: df, timeframe column name (str), nod=number of days to calc sma from, columns=list of col names (default=all num. col)
+# outputs: df
+def timeseries_moving_sum(df, timeframe, nod, columns=[]):
+    # use all columns by default
+    if columns == []:
+        columns = df.select_dtypes(np.number).columns
+    
+    # sort timeseries
+    df[timeframe] = pd.to_datetime(df[timeframe], errors='coerce')
+    df = df.sort_values(by=[timeframe], ignore_index=True)
+
+    # loop through columns
+    for col in columns:
+        # def sma column
+        columnname_new = col + '_sum_' + str(nod) + 'd'
+        df[columnname_new] = df[col]
+        
+        # loop through rows to add moving sum
+        for i in range(len(df)):
+            # case: days with not enough prev days to have moving sum
+            if i < nod-1:
+                df[columnname_new].iloc[i] = np.NaN
+            # case: days to calc moving sum
+            else:
+                # list to create sum
+                row_sum = [df[col].iloc[i-n] for n in range(nod)]
+                # add moving sum
+                df[columnname_new].iloc[i] = np.round((sum(row_sum)),3)
+    return df
+
+# add columns with moving sum to timeseries df with clustered data
+# inputs: df, timeframe column name (str), nod=number of days to calc moving sum from, 
+# columns=list of col names (default=all num. col), cluster_by=col name of cluster col(str)
+# outputs: df
+def timeseries_clustered_moving_sum(df, timeframe, nod, cluster_by, columns=[]):
+    # df for output
+    df_full = pd.DataFrame({})
+    
+    # loop through clusters
+    for c in df[cluster_by].unique():
+        # create df for one cluster
+        df_temp = df[df[cluster_by] == c]
+        # add moving sum 
+        df_temp = timeseries_moving_sum(df=df_temp, timeframe=timeframe, nod=nod, columns=columns)
         # add df for one cluster to output df
         df_full = pd.concat([df_full, df_temp], axis=0)
     
