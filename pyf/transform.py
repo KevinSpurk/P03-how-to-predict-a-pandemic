@@ -105,27 +105,30 @@ def select_feature_scaling(df, in_columns=[], skip=[], transformer_type='', load
 
 # function to choose a feature transformation like StandardScaler, MinMaxScaler, Normalizer and apply to a model dataset dict 
 # take inputs: dataset, transformer_type=normaization function, in_columns=col to transform (list, set to all num col inside func by default), 
-# skip=col not to transform if in_columns is default (list), target=choose btw. scaling features or target var (bool, default=False)
-# outputs: df with transformations, transformer
-def scaling_model_dataset(dataset, in_columns=[], skip=[], transformer_type='', target=False):
+# skip=col not to transform if in_columns is default (list), target=choose btw. scaling features or target var (bool, default=False), title=pick name for dict key to add scaler (str)
+# outputs: df with transformations
+def scaling_model_dataset(dataset, title, in_columns=[], skip=[], transformer_type='', target=False):
     # create dataset copy for results
-    dataset_sclaed = dataset.copy()
+    dataset_scaled = dataset.copy()
     
     # case: scaling features
     if target == False:
         # scaling training set
-        dataset_sclaed['X_train'], _trfm = select_feature_scaling(df=dataset_sclaed['X_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
+        dataset_scaled['X_train'], _trfm = select_feature_scaling(df=dataset_scaled['X_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
         # scaling test set
-        dataset_sclaed['X_test'], _trfm = select_feature_scaling(df=dataset_sclaed['X_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
+        dataset_scaled['X_test'], _trfm = select_feature_scaling(df=dataset_scaled['X_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
     
     # case: scaling target var
     else:
         # scaling training set
-        dataset_sclaed['y_train'], _trfm = select_feature_scaling(df=dataset_sclaed['y_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
+        dataset_scaled['y_train'], _trfm = select_feature_scaling(df=dataset_scaled['y_train'], in_columns=in_columns, skip=skip, transformer_type=transformer_type)
         # scaling test set
-        dataset_sclaed['y_test'], _trfm = select_feature_scaling(df=dataset_sclaed['y_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
+        dataset_scaled['y_test'], _trfm = select_feature_scaling(df=dataset_scaled['y_test'], in_columns=in_columns, skip=skip, load_transformer=_trfm)
+
+    # add sckler to dict
+    dataset_scaled[title] = _trfm
         
-    return dataset_sclaed, _trfm
+    return dataset_scaled
         
 
 # function to invert feature scaling transformation like StandardScaler, MinMaxScaler, Normalizer
@@ -173,5 +176,22 @@ def invert_scaling_model_dataset(dataset,  load_transformer, in_columns=[], skip
             dataset_inverted['y_train'] = invert_feature_scaling(df=dataset_inverted['y_train'], in_columns=in_columns, skip=skip, load_transformer=load_transformer)
     
     return dataset_inverted
+
+
+# function to display distribution plots and boxplots of df columns side by side
+# inputs: df, columns=col to plot (list, optional, default=all num col), skip=col not to plot(list, optional, default=[])
+# outputs: none
+from pyf.preprocessing import _df_split_columns_num
+
+def plots_continuous_var(df, in_columns=[], skip=[]):
+    df_plot, df_rest = _df_split_columns_num(df=df, in_columns=in_columns, skip=skip)
+    for col in df_plot.columns:
+        print('\n')
+        custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
+        sns.set_theme(style="whitegrid", rc=custom_params)
+        fig, axes = plt.subplots(1, 2, figsize=(18, 5))
+        sns.distplot(df_plot[col], ax=axes[0])
+        sns.boxplot(df_plot[col], ax=axes[1])
+        plt.show()
 
 

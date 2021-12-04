@@ -228,6 +228,7 @@ def regression_model_evaluation_clustered(dataset, cluster_by, undummify=False):
 
         # add cluster metrics to results df
         results = pd.concat([results, cluster_metrics], axis=0)
+        results.reset_index(inplace=True, drop=True)
     
     return results
 

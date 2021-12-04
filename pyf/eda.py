@@ -79,4 +79,22 @@ def correlation_check(df, method='pearson', limit=0.8):
     return df_results
 
 
+# function to display distribution plots and boxplots of df columns side by side
+# inputs: df, columns=col to plot (list, optional, default=all num col), skip=col not to plot(list, optional, default=[])
+# outputs: none
+from pyf.preprocessing import _df_split_columns_num
+
+def plots_continuous_var(df, in_columns=[], skip=[]):
+    df_plot, df_rest = _df_split_columns_num(df=df, in_columns=in_columns, skip=skip)
+    for col in df_plot.columns:
+        print('\n')
+        custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
+        sns.set_theme(style="whitegrid", rc=custom_params)
+        fig, axes = plt.subplots(1, 2, figsize=(18, 5))
+        sns.distplot(df_plot[col], ax=axes[0])
+        sns.boxplot(df_plot[col], ax=axes[1])
+        plt.show()
+
+
+        
 
