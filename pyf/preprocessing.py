@@ -660,6 +660,51 @@ def drop_features(df, drop):
     return df
 
 
+# 
+# inputs:
+# outputs:
+def model_dataset_to_datetimeindex(dataset, timeframe, cluster_by='', cluster_val='', dummyfied=False):
+    # concat x, y and time data
+    train = pd.concat([dataset['time_train'],dataset['X_train'],dataset['y_train']], axis=1)
+    test = pd.concat([dataset['time_test'],dataset['X_test'],dataset['y_test']], axis=1)
+    ttsplit = {'train': train, 'test': test}
+    
+    # save target col
+    target = dataset['y_train'].columns[0]
+    
+    for k, data in ttsplit.items():
+        # datetime col
+        data[timeframe] = pd.to_datetime(data[timeframe], errors='coerce')
+    
+        # case: dataset has cluster col
+        if cluster_by != '':
+            # case: cluster col is not get dummies encoded
+            if dummyfied == False:
+                # filter data for chosen cluster
+                data = data[data[cluster_by] == cluster_val]
+                # cluster col to drop
+                cluster_col = cluster_by
+        
+            # case: cluster col is  get dummies encoded
+            else:
+                # filter data for chosen cluster
+                data = data[data[cluster_by + '_' + cluster_val] == 1]
+                # dummyfied cluster col to drop
+                cluster_col = [col for col in data.columns if col.startswith(cluster_by) == True]
+        
+            # drop cluster col
+            data = data.drop(cluster_col, axis=1)
+    
+        # convert index to datetime index
+        datetime_index = pd.DatetimeIndex(data[timeframe].values)
+        data.set_index(datetime_index, inplace=True)
+    
+        # x-y-split
+        dataset['X_' + k] = data.drop([timeframe, target], axis=1)
+        dataset['y_' + k] = data[[target]]
+    
+    return dataset
+
 
 
 
