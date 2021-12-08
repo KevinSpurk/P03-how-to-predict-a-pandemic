@@ -17,7 +17,6 @@ from sklearn.feature_selection import VarianceThreshold
 from scipy.stats import chi2
 from scipy.stats import chi2_contingency
 import statsmodels.api as sm
-
 from imblearn.over_sampling import SMOTE 
 from imblearn.under_sampling import TomekLinks
 
@@ -290,9 +289,9 @@ def timeseries_interpolation_clustered(df, timeframe, cluster_by, method='linear
 
 
 # add columns with simple moving average to timeseries df
-# inputs: df, timeframe column name (str), nod=number of days to calc sma from, columns=list of col names (default=all num. col)
+# inputs: df, timeframe column name (str), nod=number of days to calc sma from, columns=list of col names (default=all num. col), drop_original=option to drop original col (bool, default=False)
 # outputs: df
-def timeseries_sma(df, timeframe, nod, columns=[]):
+def timeseries_sma(df, timeframe, nod, columns=[], drop_original=False):
     # use all columns by default
     if columns == []:
         columns = df.select_dtypes(np.number).columns
@@ -318,13 +317,18 @@ def timeseries_sma(df, timeframe, nod, columns=[]):
                 row_sum = [df[col].iloc[i-n] for n in range(nod)]
                 # add sma
                 df[columnname_new].iloc[i] = np.round((sum(row_sum)/nod),3)
+
+        # option to delete original columns
+        if drop_original == True:
+            df = df.drop(col, axis=1)
+
     return df
 
 # add columns with simple moving average to timeseries df with clustered data
-# inputs: df, timeframe column name (str), nod=number of days to calc sma from, 
-# columns=list of col names (default=all num. col), cluster_by=col name of cluster col(str)
+# inputs: df, timeframe column name (str), nod=number of days to calc sma from, columns=list of col names (default=all num. col), 
+# cluster_by=col name of cluster col(str), drop_original=option to drop original col (bool, default=False)
 # outputs: df
-def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
+def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[], drop_original=False):
     # df for output
     df_full = pd.DataFrame({})
     
@@ -333,7 +337,7 @@ def timeseries_clustered_sma(df, timeframe, nod, cluster_by, columns=[]):
         # create df for one cluster
         df_temp = df[df[cluster_by] == c]
         # add sma 
-        df_temp = timeseries_sma(df=df_temp, timeframe=timeframe, nod=nod, columns=columns)
+        df_temp = timeseries_sma(df=df_temp, timeframe=timeframe, nod=nod, columns=columns, drop_original=drop_original)
         # add df for one cluster to output df
         df_full = pd.concat([df_full, df_temp], axis=0)
     
@@ -426,18 +430,15 @@ def df_date_to_season(df, dates, drop_dates=False):
 
 # merge feature and target dfs with multiple targets. 
 # results in dict with 1 combined df containing all targets (results['all_targets']) and 1 df for each target combined separately with features (results[<target var>])
-# inputs: feature df, targets df, on=col to merge on (list), skip=target col to skip (list), timeframe=col with datetime data in case it is used for merge (str), 
-# how=merge method for pd.merge (str, default='inner'), **kwargs=more args for pd.merge
+# inputs: feature df, targets df, on=col to merge on (list), in_columns=target col to merge (list, default=all num col), skip=target col to skip (list, default=[]), 
+# timeframe=col with datetime data in case it is used for merge (str), how=merge method for pd.merge (str, default='inner'), **kwargs=more args for pd.merge
 # outputs: dict 
-def merge_features_targets(df, targets, on, skip=[], timeframe='', how='inner', **kwargs):
+def merge_features_targets(df, targets, on, in_columns=[], skip=[], timeframe='', how='inner', **kwargs):
     # dict for resulting dfs
     results = {}
     
-    # removed target col to skip
-    if skip == []:
-        targets_selected = targets.copy()
-    else:
-        targets_selected = targets.drop(skip, axis=1)
+    # pick selected targets to merge with features
+    targets_selected, not_targets = _df_split_columns_num(df=targets, in_columns=in_columns, skip=skip)
     
     # prepare datetime col for merge in case its used for merge on 
     if timeframe != '':
@@ -610,10 +611,8 @@ def timeseries_clustered_target_lag(df, timeframe, cluster_by, target, lag):
 def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag, max_lag):
     # dict for resulting dfs
     results = {}
-    
-    # add df without lag to results dict
+    # reset index
     df.reset_index(inplace=True, drop=True)
-    results['nolag'] = df
     
     # loop through lag interval
     for lag in range(min_lag, max_lag+1):

@@ -178,20 +178,54 @@ def invert_scaling_model_dataset(dataset,  load_transformer, in_columns=[], skip
     return dataset_inverted
 
 
-# function to display distribution plots and boxplots of df columns side by side
-# inputs: df, columns=col to plot (list, optional, default=all num col), skip=col not to plot(list, optional, default=[])
-# outputs: none
-from pyf.preprocessing import _df_split_columns_num
+# boxcox transformation applied to a model dataset dict 
+# take inputs: dataset, in_columns=col to transform (list, optional, default=all num col), skip=col not to transform if in_columns is default (list, optional), 
+# target=choose btw. boxcox of features or target var (bool, default=False), title=pick name for dict key to add transformer (str)
+# outputs: df with transformations
+def boxcox_model_dataset(dataset, title, in_columns=[], skip=[], target=False):
+    # create dataset copy for results
+    dataset_boxcox = dataset.copy()
+    
+    # case: boxcox features
+    if target == False:
+        # boxcox training set
+        dataset_boxcox['X_train'], _bxcx = boxcox_transform(df=dataset_boxcox['X_train'], columns=in_columns, skip=skip)
+        # boxcox test set
+        dataset_boxcox['X_test'], _bxcx = boxcox_transform(df=dataset_boxcox['X_test'], columns=in_columns, skip=skip, fit=_bxcx)
+    
+    # case: boxcox target var
+    else:
+        # boxcox training set
+        dataset_boxcox['y_train'], _bxcx = boxcox_transform(df=dataset_boxcox['y_train'], columns=in_columns, skip=skip)
+        # boxcox test set
+        dataset_boxcox['y_test'], _bxcx = boxcox_transform(df=dataset_boxcox['y_test'], columns=in_columns, skip=skip, fit=_bxcx)
 
-def plots_continuous_var(df, in_columns=[], skip=[]):
-    df_plot, df_rest = _df_split_columns_num(df=df, in_columns=in_columns, skip=skip)
-    for col in df_plot.columns:
-        print('\n')
-        custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
-        sns.set_theme(style="whitegrid", rc=custom_params)
-        fig, axes = plt.subplots(1, 2, figsize=(18, 5))
-        sns.distplot(df_plot[col], ax=axes[0])
-        sns.boxplot(df_plot[col], ax=axes[1])
-        plt.show()
+    # add sckler to dict
+    dataset_boxcox[title] = _bxcx
+        
+    return dataset_boxcox
+
+
+# apply boxcox transformation to df
+# inputs: df, columns=col to boxcox (list, optional, default=all num col), skip=col not to boxcox (list, optional, default=[]),
+# fit=secify already existing transformer (default='', optional)  
+# outputs: transformed df, transformer
+def boxcox_transform(df, columns=[], skip=[], fit=''):
+    if columns == []:
+        columns = df.select_dtypes(np.number).columns
+    _ci = {column: None for column in columns}
+    
+    for column in columns:
+        if column not in skip:
+            df[column] = np.where(df[column]<=0, np.NAN, df[column]) 
+            df[column] = df[column].fillna(df[column].median())
+            if fit == '':
+                transformed_data, ci = stats.boxcox(df[column])
+                df[column] = transformed_data
+                _ci[column] = [ci] 
+            else:
+                transformed_data = stats.boxcox(df[column], fit[column])
+                _ci = fit
+    return df, _ci
 
 
