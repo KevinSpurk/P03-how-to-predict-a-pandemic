@@ -17,6 +17,8 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import mean_squared_error
+from statsmodels.tsa.arima_model import ARIMA
+from statsmodels.tsa.stattools import acf
 
 
 
@@ -103,6 +105,7 @@ def model_dataset(dataset, title, model_type, **kwargs):
     dataset['title'] = title
     dataset['model'] = model
     return dataset
+
 
 # get model evaluation metrics based on a dataset dict as created with model_dataset function
 # inputs: dataset=dict with train test split items and model data
@@ -231,6 +234,72 @@ def regression_model_evaluation_clustered(dataset, cluster_by, undummify=False):
         results.reset_index(inplace=True, drop=True)
     
     return results
+
+
+#
+# inputs:
+# outputs:
+def arima_model_and_forecast(dataset, title, order, with_exog=False, **kwargs):
+    # target var
+    tgt = dataset['y_test'].columns[0]
+
+    # apply model
+    if with_exog == False:
+        model = ARIMA(endog=dataset['y_train'], order=order, **kwargs)
+    else:
+        model = ARIMA(endog=dataset['y_train'], exog=dataset['X_train'], order=order, **kwargs)
+    
+    # model fit
+    arima_fit = model.fit()
+
+    # create forecast
+    if with_exog == False:
+        forecast, se, conf = arima_fit.forecast(steps=len(dataset['X_test']))
+    else:   
+        forecast, se, conf = arima_fit.forecast(steps=len(dataset['X_test']) ,exog=dataset['X_test'])
+    forecast = pd.DataFrame(forecast)
+    forecast.reset_index(drop=True, inplace=True)
+    forecast.index = dataset['X_test'].index
+    forecast.rename(columns={0:'pred'}, inplace=True)
+    forecast['actual'] = dataset['y_test'][tgt]
+    
+    # add title, fit and forecast to model dataset
+    dataset['title'] = title
+    dataset['forecast'] = forecast
+    dataset['model'] = arima_fit
+    
+    return dataset
+
+
+#
+# inputs:
+# outputs:
+def arima_forecast_accuracy_metrics(dataset):
+    # get actual values and forecast from dataset
+    forecast = dataset['forecast']['pred']
+    actual = dataset['forecast']['actual']
+    
+    # calculate metrics
+    mape = np.mean(np.abs(forecast - actual)/np.abs(actual))
+    corr = np.corrcoef(forecast, actual)[0,1]
+    mins = np.amin(np.hstack([forecast[:,None], actual[:,None]]), axis=1)
+    maxs = np.amax(np.hstack([forecast[:,None], actual[:,None]]), axis=1)
+    minmax = 1 - np.mean(mins/maxs)
+    me = np.mean(forecast - actual)
+    mae = np.mean(np.abs(forecast - actual))
+    mpe = np.mean((forecast - actual)/actual)
+    rmse = np.mean((forecast - actual)**2)**.5
+    acf1 = acf(forecast - actual)[1]
+    
+    # create metrics df
+    metrics = pd.DataFrame({'model title': [dataset['title']], 'mape': [mape], 'corr': [corr], 'minmax': [minmax], 'me': [me], 'mae': [mae], 'mpe': [mpe], 'rmse': [rmse], 'acf1': [acf1]})
+
+    # add eval results to model dict
+    evaluation = {'mape': mape, 'corr': corr, 'minmax': minmax, 'me': me, 'mae': mae, 'mpe': mpe, 'rmse': rmse, 'acf1': acf1}
+    dataset.update(evaluation)
+    
+    return dataset, metrics
+
 
 
 

@@ -96,5 +96,23 @@ def plots_continuous_var(df, in_columns=[], skip=[]):
         plt.show()
 
 
-        
+#
+# inputs:
+# outputs:
+def plot_timeseries(df, timeframe, w, h, title=''):
+    # transform df to get a line for each col
+    df = df.melt(timeframe, var_name='columns', value_name='vals')
+    # plot
+    custom_params = {"axes.spines.right": False, "axes.spines.top": False, "axes.spines.left": False}
+    sns.set(rc={'figure.figsize':(w,h)})
+    sns.set_theme(style="whitegrid", rc=custom_params)
+    sns.lineplot(x=timeframe, y="vals", hue='columns', data=df).set_title('\n' + title + '\n', fontsize=16)
+    
+    #axes = plt.gca()
+    #axes.yaxis.grid()
+    plt.xlabel('')
+    plt.ylabel('')
+    plt.xticks(rotation=45, ha='right')
+    plt.show()
+
 
