@@ -1,4 +1,3 @@
-Inline-style: 
 ![alt text](https://github.com/KevinSpurk/P03-how-to-predict-a-pandemic/blob/main/presentation/masked_crowd.png "Covid title graphic")
 
 
@@ -51,7 +50,7 @@ A comparative summary of the modelling results and a recommendation for next ste
 
 
 
-Data sources:
+# Data sources:
 
 #### Google LLC "Google COVID-19 Community Mobility Reports"
 
