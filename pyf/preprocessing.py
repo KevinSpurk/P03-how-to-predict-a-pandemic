@@ -11,6 +11,7 @@ import math
 import random
 import re
 
+from sklearn.preprocessing import Normalizer, StandardScaler, MinMaxScaler, LabelEncoder
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.tools import add_constant
 from sklearn.feature_selection import VarianceThreshold
@@ -203,6 +204,41 @@ def str_to_date(date_str):
                                    
     date_object = date_object.date()
     return date_object
+
+
+# create 2 dfs from 1 df, based separating a selection of numerical col from all other col
+# inputs: df, in_columns=columns to go into df_in (list, set to all num col inside the func as default), skip=columns to go into df_out (list, default empty)
+# outputs: df_in, df_out
+def _df_split_columns_num(df, in_columns, skip):
+    # set df_out as empty df in case all col go into df_in
+    df_out = pd.DataFrame({})
+    
+    # case: select all num col by default 
+    if in_columns == []:
+        in_columns = list(df.select_dtypes(np.number).columns)
+        for col in skip:
+            in_columns.remove(col)
+    # case: select input columns
+    else:
+        in_columns = [col for col in in_columns if col not in skip]
+    
+    # separate dfs for numerical and non numerical col
+    df_in = df[in_columns]
+    try:
+        df_out = df.drop(in_columns, axis=1)
+    except:
+        pass
+    
+    return df_in, df_out
+
+
+# function to drop columns
+# inputs: df, list of columns
+# outputs: df
+def drop_features(df, drop):
+    df = df.drop(columns=drop)
+    
+    return df
 
 
 # list the missing dates in a time series df
@@ -474,7 +510,9 @@ def merge_features_targets(df, targets, on, in_columns=[], skip=[], timeframe=''
 # get df with variance value for each column of a df
 # inputs: df, threshold=variance value limit below which feature can be removed (float)
 # outputs: df with variance results
-def show_variance(df, target, threshold=0.9):
+from pyf.transform import select_feature_scaling
+
+def show_variance(df, target, threshold=0):
     # get numerical col
     numerical = df.select_dtypes(np.number)
     # drop target var in case its numerical
@@ -483,6 +521,9 @@ def show_variance(df, target, threshold=0.9):
     except:
         pass
     
+    # minmiax scaling  
+    numerical, minmax_scaler = select_feature_scaling(df=numerical, transformer_type=MinMaxScaler)
+
     # getting variance values
     selection = VarianceThreshold(threshold=(threshold))
     selection.fit(numerical)
@@ -542,7 +583,7 @@ def show_vif(df, target):
 # show column variance, p value and variance inflation factor (VIF) of columns for feature selection
 # inputs: df, target=column with target var (str), variance_threshold=variance value limit below which feature could be removed (float, optional)
 # outputs: df with results
-def feature_selection_indicators(df, target, variance_threshold=0.9):
+def feature_selection_indicators(df, target, variance_threshold=0):
     # call function to get each indicator 
     variance_table = show_variance(df=df, target=target, threshold=variance_threshold)
     p_table = show_p_value(df=df, target=target)
@@ -623,41 +664,6 @@ def timeseries_clustered_target_lags(df, timeframe, cluster_by, target, min_lag,
         results[df_title] = df_lag
     
     return results
-
-
-# create 2 dfs from 1 df, based separating a selection of numerical col from all other col
-# inputs: df, in_columns=columns to go into df_in (list, set to all num col inside the func as default), skip=columns to go into df_out (list, default empty)
-# outputs: df_in, df_out
-def _df_split_columns_num(df, in_columns, skip):
-    # set df_out as empty df in case all col go into df_in
-    df_out = pd.DataFrame({})
-    
-    # case: select all num col by default 
-    if in_columns == []:
-        in_columns = list(df.select_dtypes(np.number).columns)
-        for col in skip:
-            in_columns.remove(col)
-    # case: select input columns
-    else:
-        in_columns = [col for col in in_columns if col not in skip]
-    
-    # separate dfs for numerical and non numerical col
-    df_in = df[in_columns]
-    try:
-        df_out = df.drop(in_columns, axis=1)
-    except:
-        pass
-    
-    return df_in, df_out
-
-
-# function to drop columns
-# inputs: df, list of columns
-# outputs: df
-def drop_features(df, drop):
-    df = df.drop(columns=drop)
-    
-    return df
 
 
 # 
